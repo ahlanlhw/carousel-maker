@@ -9,12 +9,15 @@ import {
   BODY_CHAR_BUDGET,
   LAYOUT,
   MAX_SLIDES,
+  FONT_FACES,
   carouselName,
   fitSlide,
+  fontSpec,
   newSlide,
   placeLines,
   slideFileName,
   slidePlan,
+  slideFaces,
   slidesFromText,
   splitIntoSlides,
   toSlide,
@@ -106,6 +109,29 @@ describe('slidesFromText (Import text)', () => {
     const many = slidesFromText(Array.from({ length: 12 }, (_, i) => 'S' + i).join('\n\n'))
     assert.deepEqual([many.slides.length, many.dropped], [MAX_SLIDES, 2])
     assert.deepEqual(many.slides[0], newSlide('S0'))
+  })
+})
+
+describe('fontSpec and slideFaces (real bold and italic faces, loaded on demand)', () => {
+  it('bold is a heavier weight, never a bigger size; italic picks the italic face', () => {
+    assert.deepEqual(fontSpec('display', 96), { font: '800 96px "Fraunces Poster", Georgia, "Times New Roman", serif', face: 'display' })
+    assert.equal(fontSpec('display', 96, { bold: true, italic: false }).font.startsWith('900 96px "Fraunces Poster"'), true)
+    assert.equal(fontSpec('display', 96, { bold: true, italic: false }).face, 'displayBold')
+    assert.equal(fontSpec('display', 84, { bold: true, italic: true }).font.startsWith('italic 900 84px "Fraunces Poster"'), true)
+    assert.equal(fontSpec('display', 84, { bold: false, italic: true }).face, 'displayItalic')
+    assert.equal(fontSpec('sans', 40, { bold: true, italic: false }).font.startsWith('800 40px "Jakarta Semi"'), true)
+    assert.equal(fontSpec('sans', 40, { bold: true, italic: false }).face, 'sansBold')
+    // No Jakarta italic file: italic sans stays on its upright face and the browser slants it.
+    assert.deepEqual(fontSpec('sans', 40, { bold: false, italic: true }).face, 'sans')
+    assert.equal(fontSpec('sans', 40, { bold: false, italic: true }).font.startsWith('italic 600 40px'), true)
+  })
+
+  it('a slide needs its headline face and its body face, and only those', () => {
+    assert.deepEqual(slideFaces(newSlide('x')), ['display', 'sans'])
+    assert.deepEqual(slideFaces({ ...newSlide('x'), bold: true }), ['displayBold', 'sansBold'])
+    assert.deepEqual(slideFaces({ ...newSlide('x'), font: 'sans', italic: true }), ['sans'])
+    assert.equal(FONT_FACES.displayItalic.style, 'italic')
+    assert.equal(FONT_FACES.displayBold.weight, '900')
   })
 })
 

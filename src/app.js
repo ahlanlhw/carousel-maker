@@ -19,11 +19,12 @@ import {
   newSlide,
   slideFileName,
   slidePlan,
+  slideFaces,
   slidesFromText,
   splitIntoSlides,
   toSlide,
 } from './plan.js'
-import { PREVIEW_SCALE, canShareFiles, drawPreview, loadFonts, renderJpeg } from './render.js'
+import { PREVIEW_SCALE, canShareFiles, drawPreview, faceRequested, loadFace, loadFonts, loadSlideFonts, renderJpeg } from './render.js'
 
 /** @typedef {import('./plan.js').Slide} Slide */
 /** @typedef {import('./plan.js').SlideStyle} SlideStyle */
@@ -214,6 +215,10 @@ function render() {
   }
 
   buttonEl.disabled = busy || isExample
+
+  // A bold or italic face loads the first time a slide needs it; then the preview redraws.
+  const missing = [...new Set(styles.flatMap(slideFaces))].filter((id) => !faceRequested(id))
+  if (missing.length) void Promise.all(missing.map(loadFace)).then(() => scheduleRender())
 }
 
 let frame = 0
@@ -285,7 +290,9 @@ function importSlides() {
 
 /** @returns {Promise<File[]>} */
 async function makeFiles() {
+  // Every face first, so no JPEG is drawn in a fallback.
   await loadFonts()
+  await loadSlideFonts(slides.map(styleOf))
   const bottomLine = bottomEl.value
   const plan = slidePlan(slides.map((s) => toSlide(s.text)))
   /** @type {File[]} */

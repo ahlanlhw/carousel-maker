@@ -138,6 +138,68 @@ export function newSlide(text = '', style = DEFAULT_SLIDE_STYLE) {
   return { text, font: style.font, bg: style.bg, bold: style.bold, italic: style.italic }
 }
 
+/** The two family names every font string uses; the extra faces register under them too. */
+export const DISPLAY_FAMILY = 'Fraunces Poster'
+export const SANS_FAMILY = 'Jakarta Semi'
+
+/** @typedef {'display' | 'sans' | 'displayBold' | 'displayItalic' | 'sansBold'} FaceId */
+
+/**
+ * @typedef {Object} FontFaceFile
+ * @property {string} family
+ * @property {string} file File name in fonts/.
+ * @property {string} weight FontFace weight descriptor: one weight, or a range for a variable file.
+ * @property {'normal' | 'italic'} style
+ */
+
+/**
+ * Every face the maker can draw with (SIL OFL, licence files beside them in fonts/).
+ * `display` and `sans` load on every visit; the other three load only when a slide asks:
+ *   displayBold    Fraunces variable, drawn at 900
+ *   displayItalic  Fraunces italic variable, 800, or 900 when bold too
+ *   sansBold       Plus Jakarta Sans 800
+ * There is no Jakarta italic file: italic sans is the browser's slant of the upright face.
+ * @type {Readonly<Record<FaceId, FontFaceFile>>}
+ */
+export const FONT_FACES = Object.freeze({
+  display: { family: DISPLAY_FAMILY, file: 'FrauncesPoster.ttf', weight: '800', style: 'normal' },
+  sans: { family: SANS_FAMILY, file: 'JakartaSemi.ttf', weight: '600', style: 'normal' },
+  displayBold: { family: DISPLAY_FAMILY, file: 'Fraunces-Variable.ttf', weight: '900', style: 'normal' },
+  displayItalic: { family: DISPLAY_FAMILY, file: 'Fraunces-Italic-Variable.ttf', weight: '800 900', style: 'italic' },
+  sansBold: { family: SANS_FAMILY, file: 'JakartaXBold.ttf', weight: '800', style: 'normal' },
+})
+
+const DISPLAY_FALLBACK = 'Georgia, "Times New Roman", serif'
+const SANS_FALLBACK = 'system-ui, -apple-system, "Segoe UI", Arial, sans-serif'
+
+/**
+ * The canvas font string for one role at one size, and the face it draws with. Bold is a real
+ * heavier weight (serif 800 to 900, sans 600 to 800); size never changes. Every string names a
+ * system fallback, so a slide can be drawn before its face arrives.
+ *
+ * @param {FontRole} role
+ * @param {number} size
+ * @param {{ bold: boolean, italic: boolean }} [style]
+ * @returns {{ font: string, face: FaceId }}
+ */
+export function fontSpec(role, size, style = { bold: false, italic: false }) {
+  const display = role === 'display'
+  const weight = display ? (style.bold ? 900 : 800) : style.bold ? 800 : 600
+  /** @type {FaceId} */
+  const face = display ? (style.italic ? 'displayItalic' : style.bold ? 'displayBold' : 'display') : style.bold ? 'sansBold' : 'sans'
+  const family = display ? `"${DISPLAY_FAMILY}", ${DISPLAY_FALLBACK}` : `"${SANS_FAMILY}", ${SANS_FALLBACK}`
+  return { font: `${style.italic ? 'italic ' : ''}${weight} ${size}px ${family}`, face }
+}
+
+/**
+ * The faces one slide draws with: its headline font and the body sans, both in its style.
+ * @param {SlideStyle} style
+ * @returns {FaceId[]}
+ */
+export function slideFaces(style) {
+  return [...new Set([fontSpec(style.font, 0, style).face, fontSpec('sans', 0, style).face])]
+}
+
 /**
  * @typedef {Object} SplitResult
  * @property {SlideText[]} slides

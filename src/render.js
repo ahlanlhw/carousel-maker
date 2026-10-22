@@ -1,84 +1,85 @@
 /**
  * src/render.js: the drawing half. src/plan.js splits, fits and places; this file only draws.
  *
- * Fonts: Fraunces Poster (headlines) and Plus Jakarta Sans SemiBold (body), from fonts/ (SIL
- * OFL). Every font string names a system fallback, so a slide is drawn at once and drawn again
- * when the faces arrive. If they never load, the fallback stays.
- *
- * Both files are single static weights (800 and 600) with no italic. So, per slide:
- *   - Italic asks for the italic style; the browser slants the upright face.
- *   - Bold draws the text 8% larger, serif and sans alike (BOLD_SCALE). Asking for 900 on the
- *     800 face, or 800 on the 600 face, draws the same pixels in Chrome, and no stroke is
- *     added by hand. A real bold needs heavier font files.
+ * Fonts, from fonts/ (SIL OFL): Fraunces Poster (800) and Plus Jakarta Sans SemiBold (600)
+ * load on every visit. The bold and italic faces (FONT_FACES in src/plan.js) load only when a
+ * slide asks for them, under the same two family names, so the weight and style in the font
+ * string pick them. Every font string names a system fallback: the preview draws at once and
+ * again when a face arrives, and a download waits for every face its slides use, so a JPEG is
+ * never drawn in a fallback. Jakarta has no italic file: italic sans is the browser's slant of
+ * the upright face.
  */
 
-import { BACKGROUNDS, JPEG_QUALITY, LAYOUT, fitSlide, placeLines } from './plan.js'
+import { BACKGROUNDS, FONT_FACES, JPEG_QUALITY, LAYOUT, fitSlide, fontSpec, placeLines, slideFaces } from './plan.js'
 
 /** @typedef {import('./plan.js').SlidePlan} SlidePlan */
 /** @typedef {import('./plan.js').SlideStyle} SlideStyle */
 /** @typedef {import('./plan.js').FontRole} FontRole */
+/** @typedef {import('./plan.js').FaceId} FaceId */
 /** @typedef {{ bold: boolean, italic: boolean }} TextStyle */
 
-const DISPLAY_FAMILY = 'Fraunces Poster'
-const SANS_FAMILY = 'Jakarta Semi'
-// Relative to the page, so it works under a sub-path such as GitHub Pages.
-const FONT_FILES = [
-  { family: DISPLAY_FAMILY, url: 'fonts/FrauncesPoster.ttf', weight: '800' },
-  { family: SANS_FAMILY, url: 'fonts/JakartaSemi.ttf', weight: '600' },
-]
-
-/** Bold: no heavier cut ships, so bold text grows by this much. */
-const BOLD_SCALE = 1.08
-
-/** @type {TextStyle} */
-const PLAIN = { bold: false, italic: false }
-
-// The weight in each string matches the FontFace descriptor, so the real face is never
-// synthesised bolder, and the fallback lands at a close weight.
-/**
- * @param {number} size
- * @param {TextStyle} [s]
- */
-const displayFont = (size, s = PLAIN) =>
-  `${s.italic ? 'italic ' : ''}800 ${s.bold ? Math.round(size * BOLD_SCALE) : size}px "${DISPLAY_FAMILY}", Georgia, "Times New Roman", serif`
-/**
- * @param {number} size
- * @param {TextStyle} [s]
- */
-const sansFont = (size, s = PLAIN) =>
-  `${s.italic ? 'italic ' : ''}600 ${s.bold ? Math.round(size * BOLD_SCALE) : size}px "${SANS_FAMILY}", system-ui, -apple-system, "Segoe UI", Arial, sans-serif`
 /**
  * @param {FontRole} role
  * @param {number} size
  * @param {TextStyle} [s]
  */
-const fontFor = (role, size, s = PLAIN) => (role === 'display' ? displayFont(size, s) : sansFont(size, s))
+const fontFor = (role, size, s) => fontSpec(role, size, s).font
 
-/** @type {Promise<boolean> | null} */
-let fontsReady = null
+/** @type {Map<FaceId, Promise<boolean>>} */
+const faceLoads = new Map()
 
 /**
- * Load the two faces once. Resolves false (never rejects) when they cannot load.
+ * Has this face been asked for yet?
+ * @param {FaceId} id
+ */
+export const faceRequested = (id) => faceLoads.has(id)
+
+/**
+ * Register one face under its family and load it, once. Waits through document.fonts.load,
+ * so the next draw at that weight and style finds the face ready. Resolves false (never
+ * rejects) when it cannot load; the fallback then stays.
+ * @param {FaceId} id
  * @returns {Promise<boolean>}
  */
-export function loadFonts() {
-  if (!fontsReady) {
-    fontsReady = (async () => {
+export function loadFace(id) {
+  let loading = faceLoads.get(id)
+  if (!loading) {
+    loading = (async () => {
       try {
         if (typeof FontFace === 'undefined' || !document.fonts) return false
-        const base = document.baseURI
-        const faces = FONT_FILES.map((f) => new FontFace(f.family, `url(${new URL(f.url, base).href})`, { weight: f.weight }))
-        await Promise.all(faces.map((f) => f.load()))
-        for (const f of faces) document.fonts.add(f)
-        await Promise.all([document.fonts.load(displayFont(96)), document.fonts.load(sansFont(40))])
-        return true
+        const f = FONT_FACES[id]
+        // Relative to the page, so it works under a sub-path such as GitHub Pages.
+        const url = new URL(`fonts/${f.file}`, document.baseURI).href
+        const face = new FontFace(f.family, `url(${url})`, { weight: f.weight, style: f.style })
+        document.fonts.add(face)
+        await document.fonts.load(`${f.style === 'italic' ? 'italic ' : ''}${f.weight.split(' ')[0]} 40px "${f.family}"`)
+        return face.status === 'loaded'
       } catch (err) {
-        console.warn('[carousel] fonts did not load, using system fonts', err)
+        console.warn(`[carousel] ${FONT_FACES[id].file} did not load, using a system font`, err)
         return false
       }
     })()
+    faceLoads.set(id, loading)
   }
-  return fontsReady
+  return loading
+}
+
+/**
+ * The two faces every visit uses.
+ * @returns {Promise<boolean>}
+ */
+export function loadFonts() {
+  return Promise.all([loadFace('display'), loadFace('sans')]).then((ok) => ok.every(Boolean))
+}
+
+/**
+ * Every face these slides draw with (the bold and italic ones on demand).
+ * @param {SlideStyle[]} styles
+ * @returns {Promise<boolean>}
+ */
+export function loadSlideFonts(styles) {
+  const ids = [...new Set(styles.flatMap(slideFaces))]
+  return Promise.all(ids.map(loadFace)).then((ok) => ok.every(Boolean))
 }
 
 /**
@@ -122,7 +123,7 @@ export function drawSlide(ctx, slide, style, bottomLine) {
 
   for (const p of placeLines(fit)) {
     if (p.slot === 'eyebrow') {
-      ctx.font = sansFont(p.size)
+      ctx.font = fontFor('sans', p.size)
       setTracking(ctx, L.eyebrow.spacing)
       ctx.fillStyle = look.eyebrow
     } else if (p.slot === 'headline') {
@@ -130,7 +131,7 @@ export function drawSlide(ctx, slide, style, bottomLine) {
       setTracking(ctx, 0)
       ctx.fillStyle = look.ink
     } else {
-      ctx.font = sansFont(p.size, style)
+      ctx.font = fontFor('sans', p.size, style)
       setTracking(ctx, 0)
       ctx.fillStyle = look.body
     }
@@ -146,7 +147,7 @@ export function drawSlide(ctx, slide, style, bottomLine) {
 
   const line = bottomLine.trim()
   if (line) {
-    ctx.font = sansFont(L.domain.size)
+    ctx.font = fontFor('sans', L.domain.size)
     setTracking(ctx, L.domain.spacing)
     ctx.fillStyle = look.eyebrow
     ctx.fillText(line, x, L.domain.y, L.w - 2 * x)

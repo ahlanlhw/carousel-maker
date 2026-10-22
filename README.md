@@ -24,8 +24,6 @@ Live: https://ahlanlhw.github.io/carousel-maker/
 2. Two or more lines: a short first line goes big. The rest sits under it, with your line breaks.
 3. If a slide is too long to fit, the page tells you which one.
 
-Bold makes the text 8% bigger. The two font files are single weights, and the page never fakes a heavier stroke. Italic slants the upright font.
-
 ## How Import text splits
 
 1. A first line that starts with `# ` is the cover.
@@ -54,8 +52,10 @@ npm test
 ## How it draws
 
 - Canvas 2D in the browser. No build step, no dependencies.
-- Headlines: Fraunces Poster. Body: Plus Jakarta Sans SemiBold.
-- Both fonts are SIL Open Font License. Their licence files sit next to them in `fonts/`.
+- Headlines: Fraunces Poster. Body: Plus Jakarta Sans SemiBold. These two load on every visit.
+- Bold and italic use real font files: Fraunces at 900, Fraunces Italic, and Plus Jakarta Sans ExtraBold. Each one loads only when a slide uses it.
+- Plus Jakarta Sans has no italic file here, so italic sans is your browser's slant of the upright font.
+- All the fonts are SIL Open Font License. Their licence files sit next to them in `fonts/`.
 - `src/plan.js` splits, wraps and places the text, and holds the slide and background data. It has no DOM, so the tests run it in Node.
 - `src/render.js` loads the fonts and draws each slide in its own style.
 - `src/app.js` wires up the tabs, the style bar and the download.
