@@ -51,30 +51,37 @@ export const BOTTOM_LINE_MAX = 40
  * @property {string} hairline
  */
 
-/** Cream only for now. @type {Readonly<Record<'cream', Look>>} */
-export const LOOKS = Object.freeze({
-  cream: {
-    label: 'Cream',
-    bg: '#faf9f7',
-    ink: '#1c1b29',
-    rule: '#f59e0b',
-    eyebrow: '#a1560a',
-    body: 'rgba(28,27,41,0.72)',
-    hairline: '#e6e1da',
-  },
+const INK = '#1c1b29'
+const BODY_INK = 'rgba(28,27,41,0.72)'
+const AMBER = '#f59e0b'
+const AMBER_TEXT = '#a1560a'
+const HAIRLINE = '#e6e1da'
+
+/**
+ * The five slide backgrounds, all light. Cream is the default; White, Sand, a pale Amber and
+ * a pale Blush follow. The amber eyebrow and bottom line keep at least 4.5:1 on each; ink and
+ * body text keep far more.
+ */
+export const BACKGROUNDS = Object.freeze({
+  cream: { label: 'Cream', bg: '#faf9f7', ink: INK, rule: AMBER, eyebrow: AMBER_TEXT, body: BODY_INK, hairline: HAIRLINE },
+  white: { label: 'White', bg: '#ffffff', ink: INK, rule: AMBER, eyebrow: AMBER_TEXT, body: BODY_INK, hairline: HAIRLINE },
+  sand: { label: 'Sand', bg: '#f1ebe1', ink: INK, rule: AMBER, eyebrow: AMBER_TEXT, body: BODY_INK, hairline: '#ddd4c6' },
+  amber: { label: 'Amber', bg: '#fdf0d8', ink: INK, rule: '#d97706', eyebrow: AMBER_TEXT, body: BODY_INK, hairline: '#f3dcb0' },
+  blush: { label: 'Blush', bg: '#fde9ec', ink: INK, rule: AMBER, eyebrow: AMBER_TEXT, body: BODY_INK, hairline: '#f4d2d8' },
 })
 
-/** @typedef {keyof typeof LOOKS} LookId */
+/** @typedef {keyof typeof BACKGROUNDS} BackgroundId */
 
-/** @type {LookId} */
-export const DEFAULT_LOOK = 'cream'
+/** @type {BackgroundId} */
+export const DEFAULT_BACKGROUND = 'cream'
+export const BACKGROUND_IDS = /** @type {BackgroundId[]} */ (Object.keys(BACKGROUNDS))
 
 /**
  * @param {unknown} v
- * @returns {v is LookId}
+ * @returns {v is BackgroundId}
  */
-export function isLookId(v) {
-  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(LOOKS, v)
+export function isBackgroundId(v) {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(BACKGROUNDS, v)
 }
 
 /**
@@ -93,6 +100,43 @@ export const MAX_SLIDES = 10
  * @property {string} headline
  * @property {string} body
  */
+
+/** @typedef {'display' | 'sans'} FontRole Fraunces Poster (serif display) or Jakarta Semi (sans). */
+
+/**
+ * @param {unknown} v
+ * @returns {v is FontRole}
+ */
+export function isFontRole(v) {
+  return v === 'display' || v === 'sans'
+}
+
+/**
+ * One slide as the maker holds it: one tab. `text` keeps the user's line breaks. `font` is the
+ * headline's font (the body stays the sans); bold and italic apply to the headline and the
+ * body. The eyebrow and the bottom line never change.
+ *
+ * @typedef {Object} Slide
+ * @property {string} text
+ * @property {FontRole} font
+ * @property {BackgroundId} bg
+ * @property {boolean} bold
+ * @property {boolean} italic
+ */
+
+/** @typedef {Omit<Slide, 'text'>} SlideStyle */
+
+/** The default look: serif headline on cream, regular weight, upright. @type {Readonly<SlideStyle>} */
+export const DEFAULT_SLIDE_STYLE = Object.freeze({ font: 'display', bg: DEFAULT_BACKGROUND, bold: false, italic: false })
+
+/**
+ * @param {string} [text]
+ * @param {SlideStyle} [style]
+ * @returns {Slide}
+ */
+export function newSlide(text = '', style = DEFAULT_SLIDE_STYLE) {
+  return { text, font: style.font, bg: style.bg, bold: style.bold, italic: style.italic }
+}
 
 /**
  * @typedef {Object} SplitResult
@@ -134,6 +178,8 @@ function packWords(text, budget) {
 
 /**
  * A block over the body budget, split at sentence ends; a sentence over it, at word breaks.
+ * A block with line breaks is packed whole lines at a time, so no break moves; a single line
+ * over the budget splits at its own sentence ends.
  * @param {string} block
  * @param {number} budget
  * @returns {string[]}
@@ -143,6 +189,25 @@ function splitLong(block, budget) {
   /** @type {string[]} */
   const out = []
   let cur = ''
+  if (block.includes('\n')) {
+    for (const line of block.split('\n')) {
+      if (line.length > budget) {
+        if (cur) out.push(cur)
+        cur = ''
+        out.push(...splitLong(line, budget))
+        continue
+      }
+      const next = cur ? `${cur}\n${line}` : line
+      if (cur && next.length > budget) {
+        out.push(cur)
+        cur = line
+      } else {
+        cur = next
+      }
+    }
+    if (cur) out.push(cur)
+    return out
+  }
   for (const s of sentences(block)) {
     if (s.length > budget) {
       if (cur) out.push(cur)
@@ -163,11 +228,37 @@ function splitLong(block, budget) {
 }
 
 /**
- * A slide's text as a headline and body: short text is all headline; else the first sentence leads.
- * @param {string} chunk
+ * Lines with their spaces tidied, and no blank lines at either end. Blank lines inside stay.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function tidyLines(text) {
+  const lines = text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+  while (lines.length && !lines[0]) lines.shift()
+  while (lines.length && !lines[lines.length - 1]) lines.pop()
+  return lines
+}
+
+/**
+ * A slide's text as a headline and body.
+ *   - Two or more lines: the first line is the headline when it fits the headline budget, and
+ *     the rest (line breaks kept) is the body. A long first line makes it all body.
+ *   - One line: short text is all headline; else the first sentence leads.
+ * @param {string} text
  * @returns {SlideText}
  */
-function toSlide(chunk) {
+export function toSlide(text) {
+  const lines = tidyLines(text)
+  if (lines.length >= 2) {
+    const [first, ...rest] = lines
+    while (rest.length && !rest[0]) rest.shift()
+    if (first.length <= HEADLINE_CHAR_BUDGET) return { headline: first, body: rest.join('\n') }
+    return { headline: '', body: lines.join('\n') }
+  }
+  const chunk = lines[0] ?? ''
   if (chunk.length <= HEADLINE_CHAR_BUDGET) return { headline: chunk, body: '' }
   const [first, ...rest] = sentences(chunk)
   if (first && rest.length && first.length <= HEADLINE_CHAR_BUDGET) return { headline: first, body: rest.join(' ') }
@@ -175,12 +266,35 @@ function toSlide(chunk) {
 }
 
 /**
+ * Pasted text as one string per slide (line breaks kept), and whether the first is a "# " cover.
+ * @param {string} text
+ * @returns {{ texts: string[], cover: boolean }}
+ */
+function splitTexts(text) {
+  let lines = text.replace(/\r\n?/g, '\n').trim().split('\n')
+  /** @type {string[]} */
+  const texts = []
+  let cover = false
+  const heading = /^#{1,6}\s+(.*)$/.exec(lines[0]?.trim() ?? '')
+  if (heading && heading[1].trim()) {
+    texts.push(heading[1].replace(/\s+/g, ' ').trim())
+    cover = true
+    lines = lines.slice(1)
+  }
+  for (const block of lines.join('\n').trim().split(/\n[ \t]*\n/)) {
+    const clean = tidyLines(block).filter(Boolean).join('\n')
+    if (clean) texts.push(...splitLong(clean, BODY_CHAR_BUDGET))
+  }
+  return { texts, cover }
+}
+
+/**
  * Text to slides.
  *
  *   - A first line written as a heading ("# 5 ways to ...") becomes the cover headline.
  *     A bare hashtag ("#tbt") is not a heading and stays as text.
- *   - Blocks between blank lines are slides. Text with no blank line at all splits per line.
- *   - A block longer than the body budget splits at sentence ends.
+ *   - Blocks between blank lines are slides. A single line break stays inside its slide.
+ *   - A block longer than the body budget splits at line or sentence ends.
  *   - At most `maxSlides`; the rest are counted in `dropped`.
  *
  * @param {string} text
@@ -188,23 +302,25 @@ function toSlide(chunk) {
  * @returns {SplitResult}
  */
 export function splitIntoSlides(text, { maxSlides = MAX_SLIDES } = {}) {
-  let lines = text.replace(/\r\n?/g, '\n').trim().split('\n')
-  /** @type {SlideText[]} */
-  const slides = []
-  const heading = /^#{1,6}\s+(.*)$/.exec(lines[0]?.trim() ?? '')
-  if (heading && heading[1].trim()) {
-    slides.push({ headline: heading[1].replace(/\s+/g, ' ').trim(), body: '' })
-    lines = lines.slice(1)
-  }
-  const rest = lines.join('\n').trim()
-  const blocks = /\n[ \t]*\n/.test(rest) ? rest.split(/\n[ \t]*\n/) : rest.split('\n')
-  for (const block of blocks) {
-    const flat = block.replace(/\s+/g, ' ').trim()
-    if (!flat) continue
-    for (const chunk of splitLong(flat, BODY_CHAR_BUDGET)) slides.push(toSlide(chunk))
-  }
+  const { texts, cover } = splitTexts(text)
+  const slides = texts.map((t, i) => (i === 0 && cover ? { headline: t, body: '' } : toSlide(t)))
   const cap = Math.max(1, maxSlides)
   return { slides: slides.slice(0, cap), dropped: Math.max(0, slides.length - cap) }
+}
+
+/**
+ * The Import text box: the same split, as tabs. Each slide keeps its line breaks and takes
+ * `style` (the page passes the open tab's, so a picked background carries over).
+ *
+ * @param {string} text
+ * @param {SlideStyle} [style]
+ * @param {{ maxSlides?: number }} [opts]
+ * @returns {{ slides: Slide[], dropped: number }}
+ */
+export function slidesFromText(text, style = DEFAULT_SLIDE_STYLE, { maxSlides = MAX_SLIDES } = {}) {
+  const { texts } = splitTexts(text)
+  const cap = Math.max(1, maxSlides)
+  return { slides: texts.slice(0, cap).map((t) => newSlide(t, style)), dropped: Math.max(0, texts.length - cap) }
 }
 
 /**
@@ -215,8 +331,10 @@ export function splitIntoSlides(text, { maxSlides = MAX_SLIDES } = {}) {
 
 /**
  * Greedy word wrap by measured width. `measure` returns a string's width at the font the
- * caller has set (canvas measureText in the browser, a fake in tests). A word wider than
- * the line is broken by character. Text past maxLines ends the last line with an ellipsis.
+ * caller has set (canvas measureText in the browser, a fake in tests). A line break in the
+ * text is kept: each segment wraps on its own and an empty one stays a blank line. A word
+ * wider than the line is broken by character. Text past maxLines (blank lines count) ends the
+ * last line with an ellipsis.
  *
  * @param {(s: string) => number} measure
  * @param {string} text
@@ -225,43 +343,48 @@ export function splitIntoSlides(text, { maxSlides = MAX_SLIDES } = {}) {
  * @returns {WrapResult}
  */
 export function wrapLines(measure, text, maxWidth, maxLines) {
-  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean)
   /** @type {string[]} */
   const lines = []
-  let cur = ''
-  /** @param {string} word */
-  const pushWord = (word) => {
-    if (measure(word) <= maxWidth) {
-      cur = word
-      return
-    }
-    // A word wider than the line: break it by character.
-    let piece = ''
-    for (const ch of word) {
-      if (piece && measure(piece + ch) > maxWidth) {
-        lines.push(piece)
-        piece = ch
-      } else {
-        piece += ch
-      }
-    }
-    cur = piece
-  }
-  for (const word of words) {
-    if (!cur) {
-      pushWord(word)
+  for (const segment of tidyLines(text)) {
+    if (!segment) {
+      lines.push('')
       continue
     }
-    const next = `${cur} ${word}`
-    if (measure(next) <= maxWidth) {
-      cur = next
-    } else {
-      lines.push(cur)
-      cur = ''
-      pushWord(word)
+    let cur = ''
+    /** @param {string} word */
+    const pushWord = (word) => {
+      if (measure(word) <= maxWidth) {
+        cur = word
+        return
+      }
+      // A word wider than the line: break it by character.
+      let piece = ''
+      for (const ch of word) {
+        if (piece && measure(piece + ch) > maxWidth) {
+          lines.push(piece)
+          piece = ch
+        } else {
+          piece += ch
+        }
+      }
+      cur = piece
     }
+    for (const word of segment.split(' ')) {
+      if (!cur) {
+        pushWord(word)
+        continue
+      }
+      const next = `${cur} ${word}`
+      if (measure(next) <= maxWidth) {
+        cur = next
+      } else {
+        lines.push(cur)
+        cur = ''
+        pushWord(word)
+      }
+    }
+    if (cur) lines.push(cur)
   }
-  if (cur) lines.push(cur)
   if (lines.length <= maxLines) return { lines, overflow: false }
 
   const kept = lines.slice(0, Math.max(1, maxLines))
@@ -322,8 +445,6 @@ export function slideFileName(i) {
   return `carousel-${String(i + 1).padStart(2, '0')}.jpg`
 }
 
-/** @typedef {'display' | 'sans'} FontRole */
-
 /**
  * A string's width with a role, size and tracking set. The browser sets ctx.font and
  * letterSpacing, then calls measureText; tests pass a fake.
@@ -343,12 +464,14 @@ export function slideFileName(i) {
  * Wrap a slide into its slots. The headline steps down through HEADLINE_SIZES until it fits
  * three lines; past the smallest size, and for a body past four lines, the end is cut with
  * an ellipsis and `overflow` is set, so the maker can warn instead of cutting silently.
+ * `headlineRole` is the slide's font; the body and the eyebrow are always the sans.
  *
  * @param {RoleMeasure} measure
  * @param {SlidePlan} slide
+ * @param {FontRole} [headlineRole]
  * @returns {FittedSlide}
  */
-export function fitSlide(measure, slide) {
+export function fitSlide(measure, slide, headlineRole = 'display') {
   const L = LAYOUT
   let overflow = false
   let headlineSize = L.headline.size
@@ -356,7 +479,7 @@ export function fitSlide(measure, slide) {
   let headline = []
   if (slide.headline) {
     for (const size of HEADLINE_SIZES) {
-      const wrapped = wrapLines((s) => measure(s, 'display', size, 0), slide.headline, TEXT_WIDTH, L.headline.lines)
+      const wrapped = wrapLines((s) => measure(s, headlineRole, size, 0), slide.headline, TEXT_WIDTH, L.headline.lines)
       headlineSize = size
       headline = wrapped.lines
       overflow = wrapped.overflow

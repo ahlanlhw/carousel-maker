@@ -8,12 +8,16 @@ import assert from 'node:assert/strict'
 import {
   BODY_CHAR_BUDGET,
   LAYOUT,
+  MAX_SLIDES,
   carouselName,
   fitSlide,
+  newSlide,
   placeLines,
   slideFileName,
   slidePlan,
+  slidesFromText,
   splitIntoSlides,
+  toSlide,
   wrapLines,
 } from '../src/plan.js'
 import { canShareFiles } from '../src/render.js'
@@ -35,11 +39,20 @@ describe('splitIntoSlides', () => {
     assert.deepEqual(splitIntoSlides('#tbt to our first shop').slides[0], { headline: '#tbt to our first shop', body: '' })
   })
 
-  it('text with no blank line splits per line', () => {
-    assert.deepEqual(
-      splitIntoSlides('One\nTwo\nThree').slides.map((s) => s.headline),
-      ['One', 'Two', 'Three'],
-    )
+  it('a single line break stays inside the slide; only a blank line splits', () => {
+    assert.deepEqual(splitIntoSlides('One\nTwo\nThree').slides, [{ headline: 'One', body: 'Two\nThree' }])
+    assert.equal(splitIntoSlides('line\nline').slides.length, 1)
+    assert.deepEqual(splitIntoSlides('a\n\nb').slides, [
+      { headline: 'a', body: '' },
+      { headline: 'b', body: '' },
+    ])
+  })
+
+  it('a long block of short lines splits between lines, never inside one', () => {
+    const line = 'Twenty-five characters ok'
+    const { slides } = splitIntoSlides(Array(8).fill(line).join('\n'))
+    assert.ok(slides.length > 1)
+    for (const s of slides) for (const l of [s.headline, ...s.body.split('\n')]) assert.equal(l, line)
   })
 
   it('a long block leads with its first sentence', () => {
@@ -71,7 +84,37 @@ describe('splitIntoSlides', () => {
   })
 })
 
+describe("toSlide (one tab's text)", () => {
+  it('two or more lines: a short first line is the headline, the rest the body; a long first line is all body', () => {
+    assert.deepEqual(toSlide('Title\nLine one\nLine two'), { headline: 'Title', body: 'Line one\nLine two' })
+    const long = 'A first line that is much too long to sit in the headline slot.'
+    assert.deepEqual(toSlide(long + '\nNext'), { headline: '', body: long + '\nNext' })
+    assert.deepEqual(toSlide('Short one line'), { headline: 'Short one line', body: '' })
+  })
+})
+
+describe('slidesFromText (Import text)', () => {
+  it('splits once into styled tabs, keeping line breaks and the cover, capped at ten', () => {
+    const style = { font: 'sans', bg: 'sand', bold: true, italic: false }
+    const { slides, dropped } = slidesFromText('# Cover\n\nOne\nTwo\n\nThree', style)
+    assert.deepEqual(slides, [
+      { text: 'Cover', ...style },
+      { text: 'One\nTwo', ...style },
+      { text: 'Three', ...style },
+    ])
+    assert.equal(dropped, 0)
+    const many = slidesFromText(Array.from({ length: 12 }, (_, i) => 'S' + i).join('\n\n'))
+    assert.deepEqual([many.slides.length, many.dropped], [MAX_SLIDES, 2])
+    assert.deepEqual(many.slides[0], newSlide('S0'))
+  })
+})
+
 describe('wrapLines', () => {
+  it('honours line breaks: each segment wraps on its own, a blank line stays, all count against maxLines', () => {
+    assert.deepEqual(wrapLines(measure, 'aaa bbb ccc\nddd\n\neee', 70, 6), { lines: ['aaa bbb', 'ccc', 'ddd', '', 'eee'], overflow: false })
+    assert.deepEqual(wrapLines(measure, 'a\nb\nc', 70, 2), { lines: ['a', 'b…'], overflow: true })
+  })
+
   it('wraps by measured width', () => {
     assert.deepEqual(wrapLines(measure, 'aaa bbb ccc ddd', 70, 4), { lines: ['aaa bbb', 'ccc ddd'], overflow: false })
   })

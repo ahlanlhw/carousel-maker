@@ -8,14 +8,30 @@ Text in, 4:5 slides out.
 
 Live: https://ahlanlhw.github.io/carousel-maker/
 
-## How the split works
+## Features
+
+- One tab for each slide. Add, remove and move slides. Up to 10.
+- Line breaks: press Enter for a new line inside a slide.
+- Font for each slide: Serif (Fraunces Poster) or Sans (Plus Jakarta Sans).
+- Background for each slide: Cream, White, Sand, Amber or Blush. All light.
+- Bold and italic for each slide.
+- Import text: paste a whole post and it splits into slides for you.
+- Your @handle or site at the bottom of every slide, if you want one.
+
+## How a slide is laid out
+
+1. One line: short text goes big. Long text keeps its first sentence big and the rest small.
+2. Two or more lines: a short first line goes big. The rest sits under it, with your line breaks.
+3. If a slide is too long to fit, the page tells you which one.
+
+Bold makes the text 8% bigger. The two font files are single weights, and the page never fakes a heavier stroke. Italic slants the upright font.
+
+## How Import text splits
 
 1. A first line that starts with `# ` is the cover.
-2. A blank line starts a new slide. Text with no blank lines splits per line.
-3. A short slide goes big. A long one keeps its first sentence big and the rest small. Slides that are too long split at the end of a sentence.
+2. A blank line starts a new slide. A single line break stays inside its slide.
+3. Slides that are too long split at the end of a line or a sentence.
 4. Up to 10 slides. Any more are left out, and the page says so.
-
-If a slide is still too long to fit, the page tells you which one.
 
 ## Run it locally
 
@@ -40,9 +56,9 @@ npm test
 - Canvas 2D in the browser. No build step, no dependencies.
 - Headlines: Fraunces Poster. Body: Plus Jakarta Sans SemiBold.
 - Both fonts are SIL Open Font License. Their licence files sit next to them in `fonts/`.
-- `src/plan.js` splits, wraps and places the text. It has no DOM, so the tests run it in Node.
-- `src/render.js` loads the fonts and draws each slide.
-- `src/app.js` wires up the page and the download.
+- `src/plan.js` splits, wraps and places the text, and holds the slide and background data. It has no DOM, so the tests run it in Node.
+- `src/render.js` loads the fonts and draws each slide in its own style.
+- `src/app.js` wires up the tabs, the style bar and the download.
 
 ## Want to schedule them?
 

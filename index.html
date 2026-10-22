@@ -8,6 +8,35 @@
   <meta name="color-scheme" content="light dark">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Slide tabs and the style bar. Kept here so styles.css stays as it was. */
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .row-between { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+    .tools { margin-top: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 44px; min-width: 44px; padding: 0 14px;
+      border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--ink);
+      font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    .chip.tab { border-radius: 10px; font-variant-numeric: tabular-nums; }
+    .chip:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chip[aria-selected="true"], .chip[aria-checked="true"], .chip[aria-pressed="true"] {
+      background: var(--ink); border-color: var(--ink); color: var(--bg);
+    }
+    .chip.serif { font-family: Georgia, "Times New Roman", serif; }
+    .chip.bold { font-weight: 800; }
+    .chip.italic { font-style: italic; }
+    .swatch {
+      width: 44px; height: 44px; border-radius: 999px; border: 2px solid var(--line);
+      color: #1c1b29; font-size: 18px; line-height: 1; cursor: pointer;
+    }
+    .swatch[aria-checked="true"] { border-color: var(--ink); }
+    .panel { margin-top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+    .panel .button { margin-top: 12px; }
+    #cm-slide-input { min-height: 8rem; }
+    .strip li.is-active canvas { border-color: var(--ink); box-shadow: 0 0 0 2px var(--ink); }
+  </style>
   <link rel="preload" href="fonts/FrauncesPoster.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="preload" href="fonts/JakartaSemi.ttf" as="font" type="font/ttf" crossorigin>
   <script type="application/ld+json">
@@ -32,23 +61,65 @@
       <ul class="lead">
         <li>Type or paste your text.</li>
         <li>Get 4:5 slides for Instagram, TikTok and Threads.</li>
+        <li>One tab for each slide. Press Enter for a new line.</li>
+        <li>Pick the font, background, bold or italic for each slide.</li>
         <li>Download them. Nothing leaves your browser.</li>
       </ul>
     </header>
 
     <section aria-labelledby="cm-text">
-      <label id="cm-text" for="cm-text-input" class="h-label">Write your slides</label>
-      <ul class="hints">
-        <li>Start with # to make a cover.</li>
-        <li>Leave a blank line between slides.</li>
-        <li>A short first line goes big. Long slides split on their own.</li>
-        <li>Up to <span id="cm-max">10</span> slides.</li>
-      </ul>
-      <textarea id="cm-text-input" rows="8" spellcheck="true"></textarea>
+      <div class="row-between">
+        <h2 id="cm-text">Write your slides</h2>
+        <button id="cm-import-toggle" type="button" class="chip" aria-expanded="false" aria-controls="cm-import">Import text</button>
+      </div>
+
+      <div id="cm-import" class="panel" hidden>
+        <label for="cm-import-input" class="field-label" style="margin-top:0">Paste your post</label>
+        <ul class="hints">
+          <li>Start with # to make a cover.</li>
+          <li>Leave a blank line between slides.</li>
+          <li>A short first line goes big. Long slides split on their own.</li>
+          <li>Up to <span id="cm-max">10</span> slides. This replaces the slides you have.</li>
+        </ul>
+        <textarea id="cm-import-input" rows="8" spellcheck="true"></textarea>
+        <button id="cm-import-go" type="button" class="button">Make slides</button>
+      </div>
+
+      <div class="row tools">
+        <div id="cm-tabs" class="row" role="tablist" aria-label="Slides"></div>
+        <button id="cm-add" type="button" class="chip" aria-label="Add a slide">+ Slide</button>
+      </div>
+      <p id="cm-notice" class="hint" role="status"></p>
+
+      <div id="cm-slide-panel" role="tabpanel">
+        <label id="cm-slide-label" for="cm-slide-input" class="field-label">Slide 1</label>
+        <textarea id="cm-slide-input" rows="5" spellcheck="true" aria-describedby="cm-slide-hint"></textarea>
+        <p id="cm-slide-hint" class="hint">Press Enter for a new line. A short first line goes big.</p>
+        <div class="row tools">
+          <button id="cm-left" type="button" class="chip">Move left</button>
+          <button id="cm-right" type="button" class="chip">Move right</button>
+          <button id="cm-remove" type="button" class="chip">Remove</button>
+        </div>
+
+        <p id="cm-font" class="field-label">Font</p>
+        <div class="row tools" role="radiogroup" aria-labelledby="cm-font" style="margin-top:8px">
+          <button type="button" class="chip serif" role="radio" data-font="display" aria-checked="true">Serif</button>
+          <button type="button" class="chip" role="radio" data-font="sans" aria-checked="false">Sans</button>
+        </div>
+
+        <p id="cm-bg" class="field-label">Background</p>
+        <div id="cm-bgs" class="row tools" role="radiogroup" aria-labelledby="cm-bg" style="margin-top:8px"></div>
+
+        <p class="field-label">Text</p>
+        <div class="row tools" style="margin-top:8px">
+          <button id="cm-bold" type="button" class="chip bold" aria-pressed="false">Bold</button>
+          <button id="cm-italic" type="button" class="chip italic" aria-pressed="false">Italic</button>
+        </div>
+      </div>
 
       <label for="cm-bottom-line" class="field-label">Bottom line</label>
       <input id="cm-bottom-line" type="text" placeholder="@yourhandle" autocomplete="off" aria-describedby="cm-bottom-line-hint">
-      <p id="cm-bottom-line-hint" class="hint">Your @handle or site. Leave it blank for none.</p>
+      <p id="cm-bottom-line-hint" class="hint">Your @handle or site, on every slide. Leave it blank for none.</p>
     </section>
 
     <section aria-labelledby="cm-preview">
