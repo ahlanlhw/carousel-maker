@@ -28,14 +28,24 @@
     .chip.bold { font-weight: 800; }
     .chip.italic { font-style: italic; }
     .swatch {
-      width: 44px; height: 44px; border-radius: 999px; border: 2px solid var(--line);
+      width: 44px; height: 44px; border-radius: 999px; border: 2px solid color-mix(in srgb, var(--ink) 50%, transparent);
       color: #1c1b29; font-size: 18px; line-height: 1; cursor: pointer;
     }
-    .swatch[aria-checked="true"] { border-color: var(--ink); }
+    .swatch[aria-pressed="true"] { border-color: var(--ink); }
     .panel { margin-top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
     .panel .button { margin-top: 12px; }
     #cm-slide-input { min-height: 8rem; }
     .strip li.is-active canvas { border-color: var(--ink); box-shadow: 0 0 0 2px var(--ink); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 999px; background: currentColor; opacity: 0.55; }
+    .side { display: none; }
+    /* 768px and up: the open slide sits beside the editor and stays in view. */
+    @media (min-width: 768px) {
+      .editor { display: grid; grid-template-columns: 1fr 14rem; gap: 24px; align-items: start; }
+      .side { display: block; position: sticky; top: 24px; }
+      .side canvas { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+      .side.is-example canvas { opacity: 0.6; }
+    }
   </style>
   <link rel="preload" href="fonts/FrauncesPoster.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="preload" href="fonts/JakartaSemi.ttf" as="font" type="font/ttf" crossorigin>
@@ -59,7 +69,7 @@
       <p class="eyebrow">Free tool</p>
       <h1>Free carousel maker</h1>
       <ul class="lead">
-        <li>Type or paste your text.</li>
+        <li>Type each slide, or paste a whole post in Import text.</li>
         <li>Get 4:5 slides for Instagram, TikTok and Threads.</li>
         <li>One tab for each slide. Press Enter for a new line.</li>
         <li>Pick the font, background, bold or italic for each slide.</li>
@@ -88,33 +98,39 @@
       <div class="row tools">
         <div id="cm-tabs" class="row" role="tablist" aria-label="Slides"></div>
         <button id="cm-add" type="button" class="chip" aria-label="Add a slide">+ Slide</button>
+        <p id="cm-max-note" class="hint" style="margin:0" hidden>10 slides is the most.</p>
       </div>
       <p id="cm-notice" class="hint" role="status"></p>
 
+      <div class="editor">
       <div id="cm-slide-panel" role="tabpanel">
         <label id="cm-slide-label" for="cm-slide-input" class="field-label">Slide 1</label>
         <textarea id="cm-slide-input" rows="5" spellcheck="true" aria-describedby="cm-slide-hint"></textarea>
         <p id="cm-slide-hint" class="hint">Press Enter for a new line. A short first line goes big.</p>
+        <p id="cm-slide-cut" class="warn" hidden>This slide is too long, so the end is cut. Make it shorter, or use + Slide.</p>
         <div class="row tools">
           <button id="cm-left" type="button" class="chip">Move left</button>
           <button id="cm-right" type="button" class="chip">Move right</button>
-          <button id="cm-remove" type="button" class="chip">Remove</button>
+          <button id="cm-remove" type="button" class="chip">Remove slide</button>
         </div>
 
         <p id="cm-font" class="field-label">Font</p>
-        <div class="row tools" role="radiogroup" aria-labelledby="cm-font" style="margin-top:8px">
-          <button type="button" class="chip serif" role="radio" data-font="display" aria-checked="true">Serif</button>
-          <button type="button" class="chip" role="radio" data-font="sans" aria-checked="false">Sans</button>
+        <div class="row tools" role="group" aria-labelledby="cm-font" style="margin-top:8px">
+          <button type="button" class="chip serif" data-font="display" aria-pressed="true">Serif</button>
+          <button type="button" class="chip" data-font="sans" aria-pressed="false">Sans</button>
         </div>
 
-        <p id="cm-bg" class="field-label">Background</p>
-        <div id="cm-bgs" class="row tools" role="radiogroup" aria-labelledby="cm-bg" style="margin-top:8px"></div>
+        <p id="cm-bg" class="field-label">Background: <span id="cm-bg-name">Cream</span></p>
+        <div id="cm-bgs" class="row tools" role="group" aria-labelledby="cm-bg" style="margin-top:8px"></div>
 
-        <p class="field-label">Text</p>
-        <div class="row tools" style="margin-top:8px">
+        <p id="cm-style" class="field-label">Style</p>
+        <div class="row tools" role="group" aria-labelledby="cm-style" style="margin-top:8px">
           <button id="cm-bold" type="button" class="chip bold" aria-pressed="false">Bold</button>
           <button id="cm-italic" type="button" class="chip italic" aria-pressed="false">Italic</button>
         </div>
+      </div>
+      <!-- 768px and up: the open slide beside the editor. A copy of the strip's canvas, so it is hidden from screen readers. -->
+      <div id="cm-side" class="side" aria-hidden="true"><canvas id="cm-side-canvas"></canvas></div>
       </div>
 
       <label for="cm-bottom-line" class="field-label">Bottom line</label>
@@ -124,7 +140,7 @@
 
     <section aria-labelledby="cm-preview">
       <h2 id="cm-preview">Your slides<span id="cm-count"></span></h2>
-      <p id="cm-example" class="hint">Example. Type your own text to make yours.</p>
+      <p id="cm-example" class="hint">Example. Each tab above makes one slide.</p>
       <ol id="cm-slides" class="strip" tabindex="0" aria-label="Example slides"></ol>
       <div id="cm-warnings"></div>
     </section>

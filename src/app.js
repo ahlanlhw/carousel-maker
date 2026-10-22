@@ -52,6 +52,11 @@ const tabsEl = $('cm-tabs')
 const addEl = /** @type {HTMLButtonElement} */ ($('cm-add'))
 const noticeEl = $('cm-notice')
 const panelEl = $('cm-slide-panel')
+const maxNoteEl = $('cm-max-note')
+const slideCutEl = $('cm-slide-cut')
+const bgNameEl = $('cm-bg-name')
+const sideEl = $('cm-side')
+const sideCanvasEl = /** @type {HTMLCanvasElement} */ ($('cm-side-canvas'))
 const slideLabelEl = $('cm-slide-label')
 const slideEl = /** @type {HTMLTextAreaElement} */ ($('cm-slide-input'))
 const leftEl = /** @type {HTMLButtonElement} */ ($('cm-left'))
@@ -75,6 +80,9 @@ slideEl.placeholder = 'Your cover line'
 bottomEl.maxLength = BOTTOM_LINE_MAX
 bottomEl.value = DEFAULT_BOTTOM_LINE
 $('cm-max').textContent = String(MAX_SLIDES)
+maxNoteEl.textContent = `${MAX_SLIDES} slides is the most.`
+sideCanvasEl.width = LAYOUT.w * PREVIEW_SCALE
+sideCanvasEl.height = LAYOUT.h * PREVIEW_SCALE
 
 // One swatch per background.
 /** @type {HTMLButtonElement[]} */
@@ -82,7 +90,6 @@ const bgEls = BACKGROUND_IDS.map((id) => {
   const b = document.createElement('button')
   b.type = 'button'
   b.className = 'swatch'
-  b.setAttribute('role', 'radio')
   b.setAttribute('aria-label', BACKGROUNDS[id].label)
   b.title = BACKGROUNDS[id].label
   b.dataset.bg = id
@@ -138,17 +145,19 @@ function renderEditor() {
     b.type = 'button'
     b.className = 'chip tab'
     b.id = `cm-tab-${i}`
-    b.textContent = String(i + 1)
     b.setAttribute('role', 'tab')
     b.setAttribute('aria-controls', 'cm-slide-panel')
-    b.setAttribute('aria-label', `Slide ${i + 1}`)
     b.addEventListener('click', () => selectTab(i))
     b.addEventListener('keydown', (e) => onTabKey(e, i))
     tabsEl.appendChild(b)
   }
+  const anyText = hasText()
   ;[...tabsEl.children].forEach((b, i) => {
     b.setAttribute('aria-selected', String(i === active))
     b.setAttribute('tabindex', i === active ? '0' : '-1')
+    // "Slide 3" to a screen reader; an empty slide (once any has text) gets a muted dot and "(empty)".
+    const blank = anyText && !slides[i].text.trim()
+    b.innerHTML = `<span class="sr-only">Slide </span>${i + 1}${blank ? '<span class="dot" aria-hidden="true"></span><span class="sr-only"> (empty)</span>' : ''}`
   })
   panelEl.setAttribute('aria-labelledby', `cm-tab-${active}`)
 
@@ -157,13 +166,15 @@ function renderEditor() {
   if (slideEl.value !== s.text) slideEl.value = s.text
   slideEl.placeholder = active === 0 ? 'Your cover line' : 'Type this slide'
   addEl.disabled = slides.length >= MAX_SLIDES
+  maxNoteEl.hidden = slides.length < MAX_SLIDES
   leftEl.disabled = active === 0
   rightEl.disabled = active >= slides.length - 1
   removeEl.disabled = slides.length <= 1
-  for (const b of fontEls) b.setAttribute('aria-checked', String(b.dataset.font === s.font))
+  for (const b of fontEls) b.setAttribute('aria-pressed', String(b.dataset.font === s.font))
+  bgNameEl.textContent = BACKGROUNDS[s.bg].label
   for (const b of bgEls) {
     const on = b.dataset.bg === s.bg
-    b.setAttribute('aria-checked', String(on))
+    b.setAttribute('aria-pressed', String(on))
     b.textContent = on ? '✓' : ''
   }
   boldEl.setAttribute('aria-pressed', String(s.bold))
@@ -206,6 +217,12 @@ function render() {
     if (drawPreview(canvas, s, styles[i], bottomLine)) cut.push(i + 1)
   })
 
+  // The copy beside the editor (768px and up) shows the open slide.
+  const open = isExample ? 0 : Math.min(active, shown.length - 1)
+  drawPreview(sideCanvasEl, shown[open], styles[open], bottomLine)
+  sideEl.classList.toggle('is-example', isExample)
+  slideCutEl.hidden = isExample || !cut.includes(active + 1)
+
   warnEl.replaceChildren()
   if (!isExample) {
     for (const n of cut) warnEl.appendChild(warning(`Slide ${n} is too long, so the end is cut. Make it shorter, or move some to a new slide.`))
@@ -233,8 +250,19 @@ function scheduleRender() {
 /** @param {Partial<Slide>} patch */
 function updateActive(patch) {
   slides = slides.map((s, i) => (i === active ? { ...s, ...patch } : s))
+  if (patch.text !== undefined) setNotice('')
   scheduleRender()
 }
+
+/** Keep the open slide in view in the strip. scrollTo on the strip, so the page never jumps. */
+function scrollStripToActive() {
+  if (!hasText()) return
+  const li = /** @type {HTMLElement | undefined} */ (listEl.children[active])
+  if (li) listEl.scrollTo({ left: li.offsetLeft - (listEl.clientWidth - li.clientWidth) / 2, behavior: 'smooth' })
+}
+
+/** @param {number} i */
+const focusTab = (i) => /** @type {HTMLElement | undefined} */ (tabsEl.children[i])?.focus()
 
 /**
  * @param {number} i
@@ -243,7 +271,8 @@ function updateActive(patch) {
 function selectTab(i, focus = false) {
   active = i
   render()
-  if (focus) /** @type {HTMLElement} */ (tabsEl.children[i])?.focus()
+  scrollStripToActive()
+  if (focus) focusTab(i)
 }
 
 /**
@@ -268,6 +297,15 @@ function moveSlide(by) {
   slides = next
   active = to
   render()
+  scrollStripToActive()
+  // At either end the pressed button turns off; move focus to the tab.
+  if ((by === -1 && to === 0) || (by === 1 && to === slides.length - 1)) focusTab(to)
+}
+
+function closeImport() {
+  importEl.hidden = true
+  importToggleEl.setAttribute('aria-expanded', 'false')
+  importToggleEl.focus()
 }
 
 function importSlides() {
@@ -280,12 +318,13 @@ function importSlides() {
   active = 0
   importEl.hidden = true
   importToggleEl.setAttribute('aria-expanded', 'false')
+  render()
+  focusTab(0)
   setNotice(
     made.dropped > 0
       ? `Only the first ${MAX_SLIDES} slides are kept. ${made.dropped} more did not fit.`
       : `Made ${made.slides.length} slide${made.slides.length === 1 ? '' : 's'}.`,
   )
-  render()
 }
 
 /** @returns {Promise<File[]>} */
@@ -360,6 +399,12 @@ importToggleEl.addEventListener('click', () => {
   if (!importEl.hidden) importTextEl.focus()
 })
 importGoEl.addEventListener('click', importSlides)
+importEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    closeImport()
+  }
+})
 slideEl.addEventListener('input', () => updateActive({ text: slideEl.value }))
 addEl.addEventListener('click', () => {
   if (slides.length >= MAX_SLIDES) return
@@ -367,6 +412,7 @@ addEl.addEventListener('click', () => {
   active = slides.length - 1
   setNotice('')
   render()
+  scrollStripToActive()
   slideEl.focus()
 })
 removeEl.addEventListener('click', () => {
@@ -375,6 +421,8 @@ removeEl.addEventListener('click', () => {
   active = Math.min(active, slides.length - 1)
   setNotice('')
   render()
+  // One slide left: Remove turns off, so focus moves to the tab instead of the page.
+  if (slides.length <= 1) focusTab(active)
 })
 leftEl.addEventListener('click', () => moveSlide(-1))
 rightEl.addEventListener('click', () => moveSlide(1))
