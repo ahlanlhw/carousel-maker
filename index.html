@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Free carousel maker</title>
+  <meta name="description" content="Type your text and get 4:5 slides for Instagram, TikTok and Threads. Download the JPEGs. Free, no sign-up, nothing leaves your browser.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preload" href="fonts/FrauncesPoster.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="fonts/JakartaSemi.ttf" as="font" type="font/ttf" crossorigin>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Free carousel maker",
+    "url": "https://ahlanlhw.github.io/carousel-maker/",
+    "applicationCategory": "DesignApplication",
+    "operatingSystem": "Web",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "publisher": { "@type": "Organization", "name": "ahlanlhw", "url": "https://github.com/ahlanlhw" }
+  }
+  </script>
+  <script type="module" src="src/app.js"></script>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <p class="eyebrow">Free tool</p>
+      <h1>Free carousel maker</h1>
+      <ul class="lead">
+        <li>Type or paste your text.</li>
+        <li>Get 4:5 slides for Instagram, TikTok and Threads.</li>
+        <li>Download them. Nothing leaves your browser.</li>
+      </ul>
+    </header>
+
+    <section aria-labelledby="cm-text">
+      <label id="cm-text" for="cm-text-input" class="h-label">Write your slides</label>
+      <ul class="hints">
+        <li>Start with # to make a cover.</li>
+        <li>Leave a blank line between slides.</li>
+        <li>A short first line goes big. Long slides split on their own.</li>
+        <li>Up to <span id="cm-max">10</span> slides.</li>
+      </ul>
+      <textarea id="cm-text-input" rows="8" spellcheck="true"></textarea>
+
+      <label for="cm-bottom-line" class="field-label">Bottom line</label>
+      <input id="cm-bottom-line" type="text" placeholder="@yourhandle" autocomplete="off" aria-describedby="cm-bottom-line-hint">
+      <p id="cm-bottom-line-hint" class="hint">Your @handle or site. Leave it blank for none.</p>
+    </section>
+
+    <section aria-labelledby="cm-preview">
+      <h2 id="cm-preview">Your slides<span id="cm-count"></span></h2>
+      <p id="cm-example" class="hint">Example. Type your own text to make yours.</p>
+      <ol id="cm-slides" class="strip" tabindex="0" aria-label="Example slides"></ol>
+      <div id="cm-warnings"></div>
+    </section>
+
+    <section aria-labelledby="cm-post" class="card">
+      <h2 id="cm-post">Get your slides</h2>
+      <ul class="hints">
+        <li>Each slide is a 1080 x 1350 JPEG.</li>
+        <li>They are made on your device. Nothing is uploaded.</li>
+      </ul>
+      <button id="cm-download" type="button" class="button" disabled>Download all</button>
+      <p id="cm-status" class="hint status" role="status" aria-live="polite"></p>
+      <p id="cm-error" class="error" role="alert" hidden></p>
+    </section>
+
+    <section aria-labelledby="how-it-posts">
+      <h2 id="how-it-posts">How it posts</h2>
+      <ul class="hints">
+        <li>Instagram: up to 10 slides. 4:5 is the best size.</li>
+        <li>TikTok photo posts: every slide must be the same size. These all are.</li>
+        <li>Threads: up to 20 images in one post.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <ul>
+      <li>Open source, MIT. <a href="https://github.com/ahlanlhw/carousel-maker">See the code on GitHub</a>.</li>
+      <li>Want to schedule them straight to Instagram, TikTok and Threads? <a href="https://sprkly.app/tools/carousel">Use the hosted version at sprkly.app/tools/carousel</a>.</li>
+    </ul>
+  </footer>
+</body>
+</html>
